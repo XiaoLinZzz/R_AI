@@ -1,0 +1,38 @@
+.result-box {
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 24px;
+}
+
+.result-card {
+  background: #f8f9fa;
+}
+
+.header-section {
+  margin-bottom: 24px;
+}
+
+.info-card {
+  background: white;
+  margin-bottom: 24px;
+}
+
+.file-info {
+  display: flex;
+  gap: 48px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.data-card {
+  background: white;
+  margin-bottom: 24px;
+}
+
+.table-container {
+  overflow-x: auto;
+}
