@@ -12,7 +12,7 @@ from django.http import Http404
 
 logger = logging.getLogger(__name__)
 
-# 添加 JSON 编码器来处理 ObjectId
+# Add JSON encoder to handle ObjectId
 class JSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, ObjectId):
@@ -51,14 +51,14 @@ class DataProcessingView(APIView):
             # Replace NaN values with None before serialization
             df = df.replace({pd.NA: None, float('nan'): None})
             
-            # 修改数据序列化部分
+            # Modify data serialization part
             df_dict = df.to_dict(orient='records')
-            # 使用自定义的 JSONEncoder 进行序列化
+            # Use custom JSONEncoder for serialization
             serialized_data = json.loads(
                 json.dumps(df_dict, cls=JSONEncoder, ensure_ascii=False)
             )
             
-            # 准备数据，确保所有数据都是可序列化的
+            # Prepare data, ensure all data is serializable
             analysis_data = {
                 'file_name': file.name,
                 'data': serialized_data,
@@ -110,56 +110,64 @@ class DataProcessingView(APIView):
                 if col_data.isna().all():
                     continue
 
-                # 1. 首先尝试转换为数值类型（优先级提高）
+                # 1. First check if values are boolean
+                bool_values = {'true', 'false'}
+                if col_data.dropna().astype(str).str.lower().isin(bool_values).all():
+                    df[column] = col_data.map(lambda x: str(x).lower() == 'true' if pd.notna(x) else x)
+                    continue
+
+                # 2. Then try to convert to numeric type
                 try:
                     numeric_series = pd.to_numeric(col_data, errors='coerce')
                     valid_numbers = numeric_series.notna().sum()
-                    if valid_numbers / col_data.notna().sum() > 0.8:
+                    # For small datasets (less than 10 records), convert to numeric if 50% are valid numbers
+                    threshold = 0.5 if len(col_data) < 100 else 0.8
+                    if valid_numbers / col_data.notna().sum() > threshold:
                         if (numeric_series.dropna() % 1 == 0).all():
-                            df[column] = numeric_series.astype('Int64')
+                            df[column] = numeric_series.astype('Int64')  # Use nullable integer type
                         else:
                             df[column] = numeric_series
                         continue
                 except (ValueError, TypeError):
                     pass
 
-                # 2. 检查是否为复数
+                # 3. Check if values are complex numbers
                 if col_data.dtype == 'object':
                     complex_pattern = r'^\s*\(?\s*-?\d+\.?\d*\s*[+|-]\s*\d+\.?\d*[ji]\s*\)?\s*$'
                     if col_data.dropna().astype(str).str.match(complex_pattern).all():
                         df[column] = col_data.apply(lambda x: complex(x.strip('()').replace(' ', '')) if pd.notna(x) else x)
                         continue
 
-                # 3. 检查是否为布尔值
-                bool_values = {'true', 'false', 't', 'f', 'yes', 'no', 'y', 'n', '1', '0'}
-                if col_data.dropna().astype(str).str.lower().isin(bool_values).all():
-                    df[column] = col_data.map(lambda x: str(x).lower() in {'true', 't', 'yes', 'y', '1'} if pd.notna(x) else x)
-                    continue
-
-                # 4. 尝试转换为日期（添加更严格的判断）
+                # 4. Try to convert to datetime (with stricter validation)
                 try:
-                    # 检查是否包含日期相关的分隔符
+                    # Check if contains date-related separators
                     date_indicators = ['/', '-', ':']
                     has_date_separators = any(sep in str(x) for sep in date_indicators for x in col_data.dropna().head())
                     
                     if has_date_separators:
                         date_series = pd.to_datetime(col_data, errors='coerce')
                         valid_dates = date_series.notna().sum()
-                        # 提高日期判断的阈值到70%
+                        # Increase datetime validation threshold to 70%
                         if valid_dates / col_data.notna().sum() > 0.7:
                             df[column] = date_series
                             continue
                 except (ValueError, TypeError):
                     pass
 
-                # 5. 检查是否适合作为分类
+                # 5. Check if suitable for categorical type
                 if col_data.dtype == 'object':
-                    unique_ratio = col_data.nunique() / len(col_data)
-                    if unique_ratio < 0.5:
+                    unique_count = col_data.nunique()
+                    total_count = len(col_data)
+                    
+                    # Modified logic:
+                    # 1. For data with less than 10 records, convert to category if there are less than 3 unique values
+                    # 2. For larger datasets, still use ratio-based judgment
+                    if (total_count < 10 and unique_count <= 3) or \
+                       (total_count >= 10 and (unique_count / total_count) < 0.5):
                         df[column] = col_data.astype('category')
                         continue
 
-                # 6. 默认保持为字符串类型
+                # 6. Default to string type
                 df[column] = col_data.astype(str)
 
             return df
@@ -169,7 +177,7 @@ class DataProcessingView(APIView):
             logger.error(traceback.format_exc())
             raise RuntimeError(f"Error processing the file: {str(e)}")
 
-# 添加新的视图用于获取分析结果
+# Add new view for retrieving analysis results
 class GetAnalysisView(APIView):
     def get(self, request, analysis_id):
         try:

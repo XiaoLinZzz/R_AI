@@ -14,12 +14,10 @@ import {
 const { Title, Text } = Typography;
 import "./AnalysisResults.css";
 
-// 添加日期格式化辅助函数
 const formatDate = (dateString) => {
   const date = new Date(dateString);
-  if (isNaN(date.getTime())) return dateString; // 如果日期无效，返回原始字符串
+  if (isNaN(date.getTime())) return dateString;
 
-  // 使用 padStart 确保月份和日期都是两位数
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
   const year = date.getFullYear();
@@ -27,7 +25,6 @@ const formatDate = (dateString) => {
   return `${month}/${day}/${year}`;
 };
 
-// 修改值格式化辅助函数
 const formatValue = (value, type) => {
   if (value === null || value === undefined) return "-";
 
@@ -48,7 +45,6 @@ const formatValue = (value, type) => {
 
 // 添加数据类型格式化辅助函数
 const getTypeInfo = (type) => {
-  // 移除可能的额外信息，只保留核心类型
   const baseType = type.toLowerCase().split("[")[0];
 
   const typeMap = {
@@ -192,7 +188,6 @@ function AnalysisResults() {
     );
   }
 
-  // 修改列的定义
   const columns = analysisResult?.columns.map((column) => ({
     title: column,
     dataIndex: column,
@@ -200,7 +195,6 @@ function AnalysisResults() {
     render: (text) => formatValue(text, analysisResult.dtypes[column]),
   }));
 
-  // 修改数据类型展示
   const dataTypesList = Object.entries(analysisResult?.dtypes || {}).map(
     ([column, type]) => {
       const typeInfo = getTypeInfo(type);
