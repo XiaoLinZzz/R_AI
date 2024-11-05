@@ -17,9 +17,16 @@ class JSONEncoder(json.JSONEncoder):
     def default(self, obj):
         if isinstance(obj, ObjectId):
             return str(obj)
-        # Add handling for NaN/Infinity values
+        if isinstance(obj, pd.Timestamp):
+            return obj.isoformat()
         if pd.isna(obj):
             return None
+        if isinstance(obj, pd.Series):
+            return obj.to_list()
+        if isinstance(obj, pd.Categorical):
+            return str(obj)
+        if isinstance(obj, complex):
+            return f"({obj.real}+{obj.imag}j)"
         return super().default(obj)
 
 class DataProcessingView(APIView):
@@ -44,10 +51,17 @@ class DataProcessingView(APIView):
             # Replace NaN values with None before serialization
             df = df.replace({pd.NA: None, float('nan'): None})
             
+            # 修改数据序列化部分
+            df_dict = df.to_dict(orient='records')
+            # 使用自定义的 JSONEncoder 进行序列化
+            serialized_data = json.loads(
+                json.dumps(df_dict, cls=JSONEncoder, ensure_ascii=False)
+            )
+            
             # 准备数据，确保所有数据都是可序列化的
             analysis_data = {
                 'file_name': file.name,
-                'data': json.loads(json.dumps(df.head(100).to_dict(orient='records'), cls=JSONEncoder)),
+                'data': serialized_data,
                 'columns': df.columns.tolist(),
                 'dtypes': {str(k): str(v) for k, v in df.dtypes.items()}
             }
@@ -88,20 +102,65 @@ class DataProcessingView(APIView):
             
             logger.info(f"File read successfully with {len(df)} rows and {len(df.columns)} columns")
 
-            # 确保所有列名都是字符串类型
             df.columns = df.columns.astype(str)
 
-            # 数据类型转换
             for column in df.columns:
+                col_data = df[column].copy()
+                
+                if col_data.isna().all():
+                    continue
+
+                # 1. 首先尝试转换为数值类型（优先级提高）
                 try:
-                    numeric_series = pd.to_numeric(df[column], errors='coerce')
-                    if not numeric_series.isna().all():
-                        df[column] = numeric_series
-                    else:
-                        df[column] = df[column].astype(str)  # 转换为字符串以确保可序列化
-                except Exception as e:
-                    logger.warning(f"Could not convert column {column} to numeric: {str(e)}")
-                    df[column] = df[column].astype(str)  # 转换为字符串以确保可序列化
+                    numeric_series = pd.to_numeric(col_data, errors='coerce')
+                    valid_numbers = numeric_series.notna().sum()
+                    if valid_numbers / col_data.notna().sum() > 0.8:
+                        if (numeric_series.dropna() % 1 == 0).all():
+                            df[column] = numeric_series.astype('Int64')
+                        else:
+                            df[column] = numeric_series
+                        continue
+                except (ValueError, TypeError):
+                    pass
+
+                # 2. 检查是否为复数
+                if col_data.dtype == 'object':
+                    complex_pattern = r'^\s*\(?\s*-?\d+\.?\d*\s*[+|-]\s*\d+\.?\d*[ji]\s*\)?\s*$'
+                    if col_data.dropna().astype(str).str.match(complex_pattern).all():
+                        df[column] = col_data.apply(lambda x: complex(x.strip('()').replace(' ', '')) if pd.notna(x) else x)
+                        continue
+
+                # 3. 检查是否为布尔值
+                bool_values = {'true', 'false', 't', 'f', 'yes', 'no', 'y', 'n', '1', '0'}
+                if col_data.dropna().astype(str).str.lower().isin(bool_values).all():
+                    df[column] = col_data.map(lambda x: str(x).lower() in {'true', 't', 'yes', 'y', '1'} if pd.notna(x) else x)
+                    continue
+
+                # 4. 尝试转换为日期（添加更严格的判断）
+                try:
+                    # 检查是否包含日期相关的分隔符
+                    date_indicators = ['/', '-', ':']
+                    has_date_separators = any(sep in str(x) for sep in date_indicators for x in col_data.dropna().head())
+                    
+                    if has_date_separators:
+                        date_series = pd.to_datetime(col_data, errors='coerce')
+                        valid_dates = date_series.notna().sum()
+                        # 提高日期判断的阈值到70%
+                        if valid_dates / col_data.notna().sum() > 0.7:
+                            df[column] = date_series
+                            continue
+                except (ValueError, TypeError):
+                    pass
+
+                # 5. 检查是否适合作为分类
+                if col_data.dtype == 'object':
+                    unique_ratio = col_data.nunique() / len(col_data)
+                    if unique_ratio < 0.5:
+                        df[column] = col_data.astype('category')
+                        continue
+
+                # 6. 默认保持为字符串类型
+                df[column] = col_data.astype(str)
 
             return df
 
@@ -118,7 +177,7 @@ class GetAnalysisView(APIView):
             analysis = FileAnalysis.objects.get(_id=object_id)
             
             return Response({
-                'id': str(analysis._id),  # 使用 _id
+                'id': str(analysis._id),
                 'file_name': analysis.file_name,
                 'upload_time': analysis.upload_time,
                 'dtypes': analysis.dtypes,

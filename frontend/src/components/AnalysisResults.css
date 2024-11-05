@@ -36,3 +36,22 @@
 .table-container {
   overflow-x: auto;
 }
+
+.ant-pagination-item {
+  display: flex;
+  align-items: center;
+}
+
+.ant-pagination-item a {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+}
+
+/* 或者直接针对 li 元素设置 */
+.ant-pagination-item {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}

@@ -3,6 +3,7 @@ import { InboxOutlined, UploadOutlined } from "@ant-design/icons";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import "./FileUpload.css";
+import axios from "axios";
 
 const { Title, Text } = Typography;
 const { Dragger } = Upload;
@@ -42,21 +43,24 @@ function FileUpload() {
     formData.append("file", file);
 
     try {
-      const response = await fetch("http://localhost:8000/api/process-data/", {
-        method: "POST",
-        body: formData,
-      });
+      const response = await axios.post(
+        "http://localhost:8000/api/process-data/",
+        formData,
+        {
+          headers: {
+            "Content-Type": "multipart/form-data",
+          },
+        }
+      );
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const data = await response.json();
       message.success("File analyzed successfully!");
-      navigate(`/results/${data.id}`);
+      navigate(`/results/${response.data.id}`);
     } catch (error) {
       console.error("Error:", error);
-      message.error("Failed to analyze file: " + error.message);
+      message.error(
+        "Failed to analyze file: " +
+          (error.response?.data?.message || error.message)
+      );
     } finally {
       setLoading(false);
     }

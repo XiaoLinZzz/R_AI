@@ -3,8 +3,112 @@ import { useParams, useNavigate } from "react-router-dom";
 import { Typography, Card, Button, message, Spin, List, Table } from "antd";
 import axios from "axios";
 import { ArrowLeftOutlined } from "@ant-design/icons";
+import {
+  FileTextOutlined,
+  NumberOutlined,
+  CheckSquareOutlined,
+  CalendarOutlined,
+  UnorderedListOutlined,
+  FunctionOutlined,
+} from "@ant-design/icons";
 const { Title, Text } = Typography;
 import "./AnalysisResults.css";
+
+// 添加日期格式化辅助函数
+const formatDate = (dateString) => {
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return dateString; // 如果日期无效，返回原始字符串
+
+  // 使用 padStart 确保月份和日期都是两位数
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const year = date.getFullYear();
+
+  return `${month}/${day}/${year}`;
+};
+
+// 修改值格式化辅助函数
+const formatValue = (value, type) => {
+  if (value === null || value === undefined) return "-";
+
+  const baseType = type.toLowerCase().split("[")[0];
+
+  switch (baseType) {
+    case "datetime64":
+      return formatDate(value);
+    case "bool":
+      return value ? "Yes" : "No";
+    case "float64":
+    case "float32":
+      return typeof value === "number" ? value.toFixed(2) : value;
+    default:
+      return String(value);
+  }
+};
+
+// 添加数据类型格式化辅助函数
+const getTypeInfo = (type) => {
+  // 移除可能的额外信息，只保留核心类型
+  const baseType = type.toLowerCase().split("[")[0];
+
+  const typeMap = {
+    object: {
+      label: "Text",
+      icon: <FileTextOutlined style={{ marginRight: 8, color: "#1890ff" }} />,
+    },
+    int64: {
+      label: "Integer",
+      icon: <NumberOutlined style={{ marginRight: 8, color: "#52c41a" }} />,
+    },
+    int32: {
+      label: "Integer",
+      icon: <NumberOutlined style={{ marginRight: 8, color: "#52c41a" }} />,
+    },
+    int16: {
+      label: "Integer",
+      icon: <NumberOutlined style={{ marginRight: 8, color: "#52c41a" }} />,
+    },
+    int8: {
+      label: "Integer",
+      icon: <NumberOutlined style={{ marginRight: 8, color: "#52c41a" }} />,
+    },
+    float64: {
+      label: "Decimal",
+      icon: <NumberOutlined style={{ marginRight: 8, color: "#722ed1" }} />,
+    },
+    float32: {
+      label: "Decimal",
+      icon: <NumberOutlined style={{ marginRight: 8, color: "#722ed1" }} />,
+    },
+    bool: {
+      label: "Boolean",
+      icon: (
+        <CheckSquareOutlined style={{ marginRight: 8, color: "#fa8c16" }} />
+      ),
+    },
+    datetime64: {
+      label: "Date/Time",
+      icon: <CalendarOutlined style={{ marginRight: 8, color: "#eb2f96" }} />,
+    },
+    category: {
+      label: "Category",
+      icon: (
+        <UnorderedListOutlined style={{ marginRight: 8, color: "#13c2c2" }} />
+      ),
+    },
+    complex: {
+      label: "Complex Number",
+      icon: <FunctionOutlined style={{ marginRight: 8, color: "#f5222d" }} />,
+    },
+  };
+
+  return (
+    typeMap[baseType] || {
+      label: type,
+      icon: <FileTextOutlined style={{ marginRight: 8, color: "#8c8c8c" }} />,
+    }
+  );
+};
 
 function AnalysisResults() {
   const { id } = useParams();
@@ -88,6 +192,26 @@ function AnalysisResults() {
     );
   }
 
+  // 修改列的定义
+  const columns = analysisResult?.columns.map((column) => ({
+    title: column,
+    dataIndex: column,
+    key: column,
+    render: (text) => formatValue(text, analysisResult.dtypes[column]),
+  }));
+
+  // 修改数据类型展示
+  const dataTypesList = Object.entries(analysisResult?.dtypes || {}).map(
+    ([column, type]) => {
+      const typeInfo = getTypeInfo(type);
+      return {
+        column,
+        type: typeInfo.label,
+        icon: typeInfo.icon,
+      };
+    }
+  );
+
   return (
     <div className="result-box">
       <Card className="result-card" bordered={false}>
@@ -125,13 +249,22 @@ function AnalysisResults() {
           >
             <List
               grid={{ gutter: 16, column: 3 }}
-              dataSource={Object.entries(analysisResult.dtypes)}
-              renderItem={([column, type]) => (
+              dataSource={dataTypesList}
+              renderItem={(item) => (
                 <List.Item>
                   <Card size="small" bordered>
-                    <Text strong>{column}</Text>
+                    <Text strong>{item.column}</Text>
                     <br />
-                    <Text type="secondary">{type}</Text>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        marginTop: 4,
+                      }}
+                    >
+                      {item.icon}
+                      <Text type="secondary">{item.type}</Text>
+                    </div>
                   </Card>
                 </List.Item>
               )}
@@ -144,17 +277,7 @@ function AnalysisResults() {
             bordered={false}
           >
             <div className="table-container">
-              <Table
-                dataSource={analysisResult.data.slice(0, 5)}
-                columns={analysisResult.columns.map((column) => ({
-                  title: column,
-                  dataIndex: column,
-                  key: column,
-                  render: (text) => String(text),
-                }))}
-                pagination={false}
-                scroll={{ x: "max-content" }}
-              />
+              <Table dataSource={analysisResult.data} columns={columns} />
             </div>
           </Card>
         </div>
