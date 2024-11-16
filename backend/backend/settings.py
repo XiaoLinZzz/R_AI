@@ -25,7 +25,7 @@ SECRET_KEY = 'django-insecure-(zl7loxh4nl(6^it&fy^)@$=hujbbw4+2-+$d59zj$fvznop2t
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0']
 
 
 # Application definition
@@ -82,7 +82,7 @@ DATABASES = {
         'ENGINE': 'djongo',
         'NAME': 'your_database_name',
         'CLIENT': {
-            'host': 'mongodb://localhost:27017/',
+            'host': 'mongodb+srv://xiaolinzzz2002:cTFSlatpEj4EBRgL@cluster0.1tytd.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0',
         }
     }
 }
